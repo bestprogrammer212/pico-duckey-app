@@ -16,6 +16,33 @@ function run(cmd) {
   return new Promise((resolve) => { exec(cmd, () => resolve()) })
 }
 
+function ejectDrive(mountPath) {
+  return new Promise((resolve) => {
+    if (process.platform === 'win32') {
+      let letter = mountPath.charAt(0)
+      try {
+        execSync('powershell -NoProfile -Command "(New-Object -comObject Shell.Application).Namespace(17).ParseName(\'' + letter + ':\').InvokeVerb(\'Eject\')"', { stdio: 'ignore', timeout: 10000 })
+      } catch {}
+      resolve()
+    } else {
+      run('sync').then(() => {
+        try {
+          const dev = execSync('findmnt -n -o SOURCE "' + mountPath + '" 2>/dev/null').toString().trim()
+          if (dev) {
+            const disk = execSync('lsblk -no PKNAME "' + dev + '" 2>/dev/null').toString().trim()
+            run('udisksctl unmount -b "' + dev + '" 2>/dev/null').then(() => {
+              if (disk) run('udisksctl power-off -b "/dev/' + disk + '" 2>/dev/null || eject "/dev/' + disk + '" 2>/dev/null').then(resolve)
+              else resolve()
+            })
+          } else {
+            run('umount "' + mountPath + '" 2>/dev/null || true').then(resolve)
+          }
+        } catch { resolve() }
+      })
+    }
+  })
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1200, height: 780, minWidth: 900, minHeight: 600,
@@ -114,7 +141,7 @@ ipcMain.handle('payload:arm', async (_, name) => {
     const cp = findCircuitpy()
     if (!cp) return { ok: false, error: 'CIRCUITPY not mounted' }
     fs.copyFileSync(path.join(PAYLOADS, name), path.join(cp, 'payload.dd'))
-    await run('sync')
+    if (process.platform !== 'win32') await run('sync')
     return { ok: true }
   } catch (e) { return { ok: false, error: e.message } }
 })
@@ -123,7 +150,7 @@ ipcMain.handle('setupMode:swapPayload', async (_, name) => {
   const cp = findCircuitpy()
   if (!cp) return { ok: false, error: 'CIRCUITPY not mounted' }
   fs.copyFileSync(path.join(PAYLOADS, name), path.join(cp, 'payload.dd'))
-  await run('sync')
+  if (process.platform !== 'win32') await run('sync')
   return { ok: true }
 })
 ipcMain.handle('setupMode:listFiles', async () => {
@@ -142,16 +169,8 @@ ipcMain.handle('setupMode:downloadFile', async (_, name) => {
 ipcMain.handle('setupMode:eject', async () => {
   const cp = findCircuitpy()
   if (!cp) return { ok: false, error: 'CIRCUITPY not mounted' }
-  await run('sync')
-  try {
-    const dev = execSync('findmnt -n -o SOURCE "' + cp + '" 2>/dev/null').toString().trim()
-    if (dev) {
-      const disk = execSync('lsblk -no PKNAME "' + dev + '" 2>/dev/null').toString().trim()
-      await run('udisksctl unmount -b "' + dev + '" 2>/dev/null')
-      if (disk) await run('udisksctl power-off -b "/dev/' + disk + '" 2>/dev/null || eject "/dev/' + disk + '" 2>/dev/null')
-    } else { await run('umount "' + cp + '" 2>/dev/null || true') }
-    return { ok: true }
-  } catch (e) { return { ok: false, error: e.message } }
+  await ejectDrive(cp)
+  return { ok: true }
 })
 
 ipcMain.handle('wifi:get', () => {
