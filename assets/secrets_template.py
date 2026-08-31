@@ -1,0 +1,4 @@
+secrets = {
+    'ssid': 'YOUR_WIFI_NAME',
+    'password': 'YOUR_WIFI_PASSWORD'
+}
