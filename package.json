@@ -1,0 +1,21 @@
+{
+  "name": "pico-ducky-app",
+  "version": "1.0.0",
+  "description": "Flash Pico + Payload Editor + Recorder",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.enea.picoducky",
+    "productName": "Pico Ducky",
+    "win": { "target": "portable" },
+    "linux": { "target": "AppImage" },
+    "mac": { "target": "dmg" }
+  }
+}
