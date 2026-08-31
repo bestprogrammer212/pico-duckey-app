@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pico Ducky</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="titlebar">
+    <span class="titlebar-title">pico-ducky</span>
+    <div class="titlebar-controls">
+      <button onclick="window.picoFlash.minimize()" class="min"></button>
+      <button onclick="window.picoFlash.maximize()" class="max"></button>
+      <button onclick="window.picoFlash.close()" class="close"></button>
+    </div>
+  </div>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="logo"><div class="logo-text">PICO DUCKY</div><div class="logo-sub">Flash . Edit . Record</div></div>
+      <span class="nav-section-label">Navigation</span>
+      <nav class="nav">
+        <button class="nav-btn active" data-panel="flash">Flash Mode</button>
+        <button class="nav-btn" data-panel="setup">Setup Mode</button>
+        <button class="nav-btn" data-panel="payloads">Payloads</button>
+        <button class="nav-btn" data-panel="editor">Editor</button>
+        <button class="nav-btn" data-panel="recorder">Recorder</button>
+        <button class="nav-btn" data-panel="logs">Logs</button>
+      </nav>
+      <div style="padding:0 12px;margin-bottom:8px;"><button class="btn-ghost" id="btn-reconfigure" style="width:100%;font-size:11px;padding:7px 10px;">Reconfigure</button></div>
+      <div class="device-status"><div class="status-dot none" id="status-dot"></div><span class="status-label" id="status-label">No device detected</span></div>
+    </aside>
+    <main class="content">
+      <div class="panel active" id="panel-flash">
+        <h1 class="panel-title">Flash Mode</h1>
+        <p class="panel-desc">Wipe and reflash your Pico.</p>
+        <div class="steps">
+          <div class="step" id="step-1"><div class="step-num">01</div><div class="step-body"><div class="step-label">Detect Pico</div><div class="step-sub">Waiting...</div></div></div>
+          <div class="step" id="step-2"><div class="step-num">02</div><div class="step-body"><div class="step-label">Wipe Flash</div><div class="step-sub">Pending</div></div></div>
+          <div class="step" id="step-3"><div class="step-num">03</div><div class="step-body"><div class="step-label">Flash CircuitPython</div><div class="step-sub">Pending</div></div></div>
+          <div class="step" id="step-4"><div class="step-num">04</div><div class="step-body"><div class="step-label">Copy Files</div><div class="step-sub">Pending</div></div></div>
+          <div class="step" id="step-5"><div class="step-num">05</div><div class="step-body"><div class="step-label">Arm Payload</div><div class="step-sub">Pending</div></div></div>
+        </div>
+        <button class="btn-primary" id="btn-flash">Start Flash</button>
+      </div>
+      <div class="panel" id="panel-setup">
+        <h1 class="panel-title">Setup Mode</h1>
+        <p class="panel-desc">Bridge GP0 to GND and plug in.</p>
+        <div id="setup-not-ready" class="setup-not-ready"><p>No CIRCUITPY detected.</p></div>
+        <div id="setup-cards" class="setup-cards" style="display:none;">
+          <div class="setup-card" id="card-swap">Swap Payload</div>
+          <div class="setup-card" id="card-download">Download File</div>
+          <div class="setup-card" id="card-eject">Eject Safely</div>
+          <div class="setup-card" id="card-reflash">Full Reflash</div>
+        </div>
+        <div id="setup-log"></div>
+      </div>
+      <div class="panel" id="panel-payloads">
+        <h1 class="panel-title">Payloads</h1>
+        <p class="panel-desc">Manage your .dd files.</p>
+        <div class="payload-actions"><button class="btn-primary" id="btn-new-payload">+ New</button><button class="btn-ghost" id="btn-import-payload">Import</button></div>
+        <div id="payload-list" class="payload-list"></div>
+      </div>
+      <div class="panel" id="panel-editor">
+        <h1 class="panel-title">Payload Editor</h1>
+        <p class="panel-desc">Edit Ducky Script.</p>
+        <div class="editor-toolbar">
+          <select id="editor-payload-select" class="select"></select>
+          <button class="btn-primary" id="btn-editor-save">Save</button>
+          <button class="btn-ghost" id="btn-editor-new">+ New</button>
+          <button class="btn-ghost" id="btn-editor-arm">Arm</button>
+          <button class="btn-ghost" id="btn-editor-delete">Delete</button>
+        </div>
+        <div class="editor-info"><span id="editor-char-count">0 chars</span><span id="editor-line-count">0 lines</span></div>
+        <textarea id="editor-textarea" class="editor-textarea" spellcheck="false" placeholder="REM Type your Ducky Script here..."></textarea>
+      </div>
+      <div class="panel" id="panel-recorder">
+        <h1 class="panel-title">Payload Recorder</h1>
+        <p class="panel-desc">Record keystrokes to generate a .dd payload.</p>
+        <div class="recorder-controls">
+          <button class="btn-record" id="btn-record-start">Start Recording</button>
+          <button class="btn-stop" id="btn-record-stop" disabled>Stop &amp; Generate</button>
+          <span id="recorder-status" class="recorder-status">Idle</span>
+          <span id="recorder-count" class="recorder-count">0 events</span>
+        </div>
+        <div class="recorder-info">
+          <p><strong>Auto-Suppress:</strong> While this app is open, the Pico will NOT execute payloads.</p>
+        </div>
+        <h3>Generated Script:</h3>
+        <textarea id="recorder-preview" class="editor-textarea" spellcheck="false" readonly placeholder="Recorded script will appear here..."></textarea>
+        <div class="recorder-save-row">
+          <input type="text" id="recorder-filename" placeholder="payload-name" class="input" />
+          <button class="btn-primary" id="btn-recorder-save" disabled>Save as .dd</button>
+        </div>
+      </div>
+      <div class="panel" id="panel-logs">
+        <h1 class="panel-title">Logs</h1>
+        <p class="panel-desc">Flash and setup output.</p>
+        <div id="log-console" class="log-console"></div>
+      </div>
+    </main>
+  </div>
+  <div class="modal-overlay" id="swap-modal"><div class="modal"><h2>Select Payload</h2><div id="swap-payload-list" class="modal-list"></div><button class="btn-ghost" id="btn-swap-cancel">Cancel</button></div></div>
+  <div class="modal-overlay" id="download-modal"><div class="modal"><h2>Download File</h2><div id="download-file-list" class="modal-list"></div><button class="btn-ghost" id="btn-download-cancel">Cancel</button></div></div>
+  <div class="modal-overlay" id="reconfigure-modal"><div class="modal"><h2>Reconfigure?</h2><p>Delete all assets and re-run setup?</p><div class="modal-buttons"><button class="btn-primary" id="btn-reconfigure-confirm">Confirm</button><button class="btn-ghost" id="btn-reconfigure-cancel">Cancel</button></div></div></div>
+  <div class="modal-overlay" id="setup-wizard-modal"><div class="modal" style="max-width:500px;"><h2>First-Time Setup</h2><p>Select your Pico variant:</p><select id="wizard-board" class="select"><option value="Pico">Pico</option><option value="Pico W">Pico W</option><option value="Pico 2">Pico 2</option><option value="Pico 2 W">Pico 2 W</option></select><div id="wizard-wifi" style="display:none;margin-top:12px;"><input type="text" id="wizard-ssid" placeholder="SSID" class="input" value="pico-ducky" /><input type="text" id="wizard-password" placeholder="Password" class="input" value="ducky1234" style="margin-top:8px;" /></div><div id="wizard-progress" style="display:none;margin-top:16px;"><div id="wizard-log" class="log-console" style="max-height:200px;"></div></div><div class="modal-buttons" style="margin-top:16px;"><button class="btn-primary" id="btn-wizard-start">Download &amp; Setup</button></div></div></div>
+  <script src="app.js"></script>
+</body>
+</html>
