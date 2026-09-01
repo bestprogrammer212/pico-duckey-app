@@ -1,87 +1,90 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { execSync } = require('child_process')
 
 const BOOTSEL_LABELS = ['RPI-RP2', 'RP2350', 'RPI-RP2350', 'RPI-RP2040']
 const CIRCUITPY_LABELS = ['CIRCUITPY']
 
-function findMountLinux(labels) {
-  const user = process.env.USER || os.userInfo().username
-  for (const label of labels) {
-    for (const base of ['/media/' + user, '/run/media/' + user, '/Volumes']) {
-      const p = base + '/' + label
-      if (fs.existsSync(p)) return p
+// Hilfsfunktion: Prüft, ob ein Pfad existiert, ohne abzustürzen
+function safeExists(p) {
+  try {
+    return fs.existsSync(p)
+  } catch (e) {
+    return false
+  }
+}
+
+// Methode zur Erkennung anhand von Mikrocontroller-typischen Dateien
+function detectByFiles(driveRoot, labels) {
+  // BOOTSEL-Modus: INFO_UF2.TXT existiert immer auf dem Raspberry Pi Pico / RP2350
+  if (labels.some(l => BOOTSEL_LABELS.includes(l))) {
+    if (safeExists(path.join(driveRoot, 'INFO_UF2.TXT')) || safeExists(path.join(driveRoot, 'info_uf2.txt'))) {
+      return true
     }
   }
+  // CIRCUITPY-Modus: Typische CircuitPython Dateien/Ordner
+  if (labels.includes('CIRCUITPY')) {
+    if (safeExists(path.join(driveRoot, 'boot.py')) ||
+        safeExists(path.join(driveRoot, 'code.py')) ||
+        safeExists(path.join(driveRoot, 'lib'))) {
+      return true
+    }
+  }
+  return false
+}
+
+function findMountLinuxAndMac(labels) {
+  const user = process.env.USER || os.userInfo().username
+  const searchPaths = []
+
+  // Pfade für Linux und macOS sammeln
+  for (const label of labels) {
+    searchPaths.push('/media/' + user + '/' + label)
+    searchPaths.push('/run/media/' + user + '/' + label)
+    searchPaths.push('/Volumes/' + label)
+  }
+
+  // 1. Direkte Erkennung über das Mount-Label
+  for (const p of searchPaths) {
+    if (safeExists(p)) return p
+  }
+
+  // 2. Fallback: Alle Mount-Ordner nach typischen Dateien durchsuchen (falls Label anders heißt)
+  const bases = ['/media/' + user, '/run/media/' + user, '/Volumes']
+  for (const base of bases) {
+    if (!safeExists(base)) continue
+    try {
+      const dirs = fs.readdirSync(base)
+      for (const dir of dirs) {
+        const fullPath = path.join(base, dir)
+        if (detectByFiles(fullPath, labels)) return fullPath
+      }
+    } catch (e) {}
+  }
+
   return null
 }
 
 function findMountWindows(labels) {
-  for (let code = 67; code <= 90; code++) {
+  // Alle verfügbaren Laufwerksbuchstaben A-Z prüfen
+  for (let code = 65; code <= 90; code++) {
     const letter = String.fromCharCode(code)
     const driveRoot = letter + ':\\'
-    try {
-      if (!fs.existsSync(driveRoot)) continue
-    } catch (e) { continue }
 
-    // Methode 1: fsutil Volume-Label
-    let label = ''
-    try {
-      const out = execSync('fsutil fsinfo volumeinfo ' + letter + ':', {
-        stdio: ['pipe', 'pipe', 'ignore'],
-        timeout: 3000
-      }).toString()
-      const m = out.match(/Volume\s+Label\s*:\s*(.+)/i)
-      if (m) label = m[1].trim()
-    } catch (e) {}
+    // Sicherstellen, dass auf das Laufwerk zugegriffen werden kann
+    if (!safeExists(driveRoot)) continue
 
-    for (const target of labels) {
-      if (label === target) return driveRoot
+    // Direkt über dateibasierte Erkennung (schnellste und sicherste Methode auf Windows)
+    if (detectByFiles(driveRoot, labels)) {
+      return driveRoot
     }
-
-    // Methode 2: wmic Volume-Label (fallback)
-    if (!label) {
-      try {
-        const out2 = execSync('wmic logicaldisk where "DeviceID=\'' + letter + ':\'" get VolumeName /value', {
-          stdio: ['pipe', 'pipe', 'ignore'],
-          timeout: 3000
-        }).toString()
-        const m2 = out2.match(/VolumeName=(.+)/i)
-        if (m2) {
-          label = m2[1].trim()
-          for (const target of labels) {
-            if (label === target) return driveRoot
-          }
-        }
-      } catch (e) {}
-    }
-
-    // Methode 3: Datei-basierte Erkennung (zuverlaessig!)
-    try {
-      // BOOTSEL: INFO_UF2.TXT existiert immer auf dem Pico im BOOTSEL-Modus
-      if (labels.includes('RPI-RP2') || labels.includes('RP2350')) {
-        const infoUf2 = path.join(driveRoot, 'INFO_UF2.TXT')
-        if (fs.existsSync(infoUf2)) {
-          return driveRoot
-        }
-      }
-      // CIRCUITPY: boot.py / code.py / lib Ordner
-      if (labels.includes('CIRCUITPY')) {
-        if (fs.existsSync(path.join(driveRoot, 'boot.py')) ||
-            fs.existsSync(path.join(driveRoot, 'code.py')) ||
-            fs.existsSync(path.join(driveRoot, 'lib'))) {
-          return driveRoot
-        }
-      }
-    } catch (e) {}
   }
   return null
 }
 
 function findMount(labels) {
   if (process.platform === 'win32') return findMountWindows(labels)
-  return findMountLinux(labels)
+  return findMountLinuxAndMac(labels)
 }
 
 function findBootsel() { return findMount(BOOTSEL_LABELS) }
@@ -93,8 +96,10 @@ function waitForMount(labels, timeoutMs) {
     const start = Date.now()
     const iv = setInterval(() => {
       const p = findMount(labels)
-      if (p) { clearInterval(iv); resolve(p) }
-      else if (Date.now() - start > timeout) {
+      if (p) {
+        clearInterval(iv)
+        resolve(p)
+      } else if (Date.now() - start > timeout) {
         clearInterval(iv)
         reject(new Error('Timed out waiting for device'))
       }
@@ -107,8 +112,10 @@ function waitForUnmount(mountPath, timeoutMs) {
   return new Promise((resolve, reject) => {
     const start = Date.now()
     const iv = setInterval(() => {
-      if (!fs.existsSync(mountPath)) { clearInterval(iv); resolve() }
-      else if (Date.now() - start > timeout) {
+      if (!safeExists(mountPath)) {
+        clearInterval(iv)
+        resolve()
+      } else if (Date.now() - start > timeout) {
         clearInterval(iv)
         reject(new Error('Timed out waiting for unmount'))
       }
