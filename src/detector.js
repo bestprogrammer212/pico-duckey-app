@@ -38,18 +38,11 @@ function findMountWindows(labels) {
       try {
         if (labels.includes('RPI-RP2') || labels.includes('RP2350')) {
           const infoUf2 = path.join(driveRoot, 'INFO_UF2.TXT')
-          if (fs.existsSync(infoUf2)) {
-            const content = fs.readFileSync(infoUf2, 'utf8')
-            for (const target of labels) {
-              if (content.includes(target)) return driveRoot
-            }
-            return driveRoot
-          }
+          if (fs.existsSync(infoUf2)) return driveRoot
         }
         if (labels.includes('CIRCUITPY')) {
           if (fs.existsSync(path.join(driveRoot, 'boot.py')) ||
               fs.existsSync(path.join(driveRoot, 'code.py')) ||
-              fs.existsSync(path.join(driveRoot, 'CIRCUITPY')) ||
               fs.existsSync(path.join(driveRoot, 'lib'))) {
             return driveRoot
           }
@@ -66,7 +59,6 @@ function findMount(labels) {
 }
 
 function findBootsel() { return findMount(BOOTSEL_LABELS) }
-
 function findCircuitpy() { return findMount(CIRCUITPY_LABELS) }
 
 function waitForMount(labels, timeoutMs) {
