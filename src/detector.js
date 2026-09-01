@@ -23,32 +23,58 @@ function findMountWindows(labels) {
     const driveRoot = letter + ':\\'
     try {
       if (!fs.existsSync(driveRoot)) continue
-      let label = ''
+    } catch (e) { continue }
+
+    // Methode 1: fsutil Volume-Label
+    let label = ''
+    try {
+      const out = execSync('fsutil fsinfo volumeinfo ' + letter + ':', {
+        stdio: ['pipe', 'pipe', 'ignore'],
+        timeout: 3000
+      }).toString()
+      const m = out.match(/Volume\s+Label\s*:\s*(.+)/i)
+      if (m) label = m[1].trim()
+    } catch (e) {}
+
+    for (const target of labels) {
+      if (label === target) return driveRoot
+    }
+
+    // Methode 2: wmic Volume-Label (fallback)
+    if (!label) {
       try {
-        const out = execSync('fsutil fsinfo volumeinfo ' + letter + ':', {
+        const out2 = execSync('wmic logicaldisk where "DeviceID=\'' + letter + ':\'" get VolumeName /value', {
           stdio: ['pipe', 'pipe', 'ignore'],
           timeout: 3000
         }).toString()
-        const m = out.match(/Volume\s+Label\s*:\s*(.+)/i)
-        if (m) label = m[1].trim()
-      } catch {}
-      for (const target of labels) {
-        if (label === target) return driveRoot
-      }
-      try {
-        if (labels.includes('RPI-RP2') || labels.includes('RP2350')) {
-          const infoUf2 = path.join(driveRoot, 'INFO_UF2.TXT')
-          if (fs.existsSync(infoUf2)) return driveRoot
-        }
-        if (labels.includes('CIRCUITPY')) {
-          if (fs.existsSync(path.join(driveRoot, 'boot.py')) ||
-              fs.existsSync(path.join(driveRoot, 'code.py')) ||
-              fs.existsSync(path.join(driveRoot, 'lib'))) {
-            return driveRoot
+        const m2 = out2.match(/VolumeName=(.+)/i)
+        if (m2) {
+          label = m2[1].trim()
+          for (const target of labels) {
+            if (label === target) return driveRoot
           }
         }
-      } catch {}
-    } catch {}
+      } catch (e) {}
+    }
+
+    // Methode 3: Datei-basierte Erkennung (zuverlaessig!)
+    try {
+      // BOOTSEL: INFO_UF2.TXT existiert immer auf dem Pico im BOOTSEL-Modus
+      if (labels.includes('RPI-RP2') || labels.includes('RP2350')) {
+        const infoUf2 = path.join(driveRoot, 'INFO_UF2.TXT')
+        if (fs.existsSync(infoUf2)) {
+          return driveRoot
+        }
+      }
+      // CIRCUITPY: boot.py / code.py / lib Ordner
+      if (labels.includes('CIRCUITPY')) {
+        if (fs.existsSync(path.join(driveRoot, 'boot.py')) ||
+            fs.existsSync(path.join(driveRoot, 'code.py')) ||
+            fs.existsSync(path.join(driveRoot, 'lib'))) {
+          return driveRoot
+        }
+      }
+    } catch (e) {}
   }
   return null
 }
